@@ -1,0 +1,26 @@
+[tool.poetry]
+name = "nanornaqtl"
+version = "1.0.1"
+description = "A comprehensive toolkit for multi-molecular phenotyping and QTL analysis based on Nanopore direct RNA sequencing data"
+authors = ["Xinran Xu <xinranxu0930@gmail.com>"]
+license = "MIT"
+readme = "README.md"
+homepage = "https://github.com/xinranxu0930/nanornaqtl"
+repository = "https://github.com/xinranxu0930/nanornaqtl"
+keywords = [
+    "nanopore",
+    "RNA-seq",
+    "QTL",
+    "m6A",
+    "RNA-modification",
+]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+
+[tool.poetry.scripts]
+nanornaqtl = "nanornaqtl.main:main"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
