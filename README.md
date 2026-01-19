@@ -1,5 +1,8 @@
 # nanornaqtl
 
+[![PyPI version](https://badge.fury.io/py/nanornaqtl.svg)](https://badge.fury.io/py/nanornaqtl)
+[![Python versions](https://img.shields.io/pypi/pyversions/nanornaqtl.svg)](https://pypi.org/project/nanornaqtl/)
+
 A comprehensive toolkit for multi-molecular phenotyping and QTL analysis based on Nanopore direct RNA sequencing data
 
 

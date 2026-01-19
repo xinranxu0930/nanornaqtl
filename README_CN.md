@@ -1,5 +1,8 @@
 # nanornaqtl
 
+[![PyPI version](https://badge.fury.io/py/nanornaqtl.svg)](https://badge.fury.io/py/nanornaqtl)
+[![Python versions](https://img.shields.io/pypi/pyversions/nanornaqtl.svg)](https://pypi.org/project/nanornaqtl/)
+
 基于Nanopore direct RNA测序数据的多分子表型识别与QTL分析工具包
 
 
