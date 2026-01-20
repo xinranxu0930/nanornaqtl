@@ -60,7 +60,7 @@ def aggregate_modification_sites(pileup_df, motif_cols):
 
 def process_chromosome_coverage(args):
     """
-    处理单个染色体的覆盖度计算
+    处理单个染色体的覆盖度计算 - 使用fetch方法
     """
     chrom, positions, bam_file, min_mapq = args
     
@@ -68,28 +68,34 @@ def process_chromosome_coverage(args):
     
     try:
         with pysam.AlignmentFile(bam_file, "rb") as bam:
-            position_set = set(positions)
-            
-            # 获取染色体范围
-            if not positions:
-                return {chrom: {}}
-            
-            min_pos = min(positions)
-            max_pos = max(positions)
-            
-            # pileup扫描
-            for pileup_column in bam.pileup(
-                chrom, min_pos, max_pos + 1, 
-                min_mapping_quality=min_mapq,
-                stepper='nofilter',
-                ignore_overlaps=False,
-                ignore_orphans=False
-            ):
-                if pileup_column.pos in position_set:
-                    # 统计该位点通过MAPQ阈值的read数量
-                    coverage = sum(1 for read in pileup_column.pileups 
-                                 if not read.is_del and not read.is_refskip)
-                    coverage_dict[pileup_column.pos] = coverage
+            for pos in positions:
+                count = 0
+                for read in bam.fetch(chrom, pos, pos + 1):
+                    if read.mapping_quality < min_mapq:
+                        continue
+                    # 确认该位点在read的比对范围内且不是deletion/refskip
+                    if read.reference_start <= pos < read.reference_end:
+                        # 检查该位点是否被deletion或refskip覆盖
+                        ref_pos = read.reference_start
+                        is_covered = True
+                        for op, length in read.cigartuples:
+                            if ref_pos > pos:
+                                break
+                            if op in [0, 7, 8]:  # M, =, X (match/mismatch)
+                                if ref_pos <= pos < ref_pos + length:
+                                    is_covered = True
+                                    break
+                                ref_pos += length
+                            elif op in [2, 3]:  # D, N (deletion, refskip)
+                                if ref_pos <= pos < ref_pos + length:
+                                    is_covered = False
+                                    break
+                                ref_pos += length
+                            elif op in [1, 4, 5]:  # I, S, H (insertion, soft/hard clip)
+                                pass  # 不消耗参考位置
+                        if is_covered:
+                            count += 1
+                coverage_dict[pos] = count
     
     except Exception as e:
         print(f"警告: 处理染色体 {chrom} 时出错: {e}", file=sys.stderr)

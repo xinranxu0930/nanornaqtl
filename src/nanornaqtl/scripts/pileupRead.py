@@ -10,6 +10,7 @@ from functools import partial
 from tqdm import tqdm
 
 
+
 # ============ Motif提取函数  ============
 
 def extract_inosine_motif(seq, idx, strand):
@@ -347,107 +348,115 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    # 修饰类型配置 - 使用普通函数以支持多进程pickle
-    inosine_base_dict = {"+": "A", "-": "T"}
-    inosine_motif_info = {
-        "patterns": [re.compile(r"TA[GT]")],
-        "extractors": [extract_inosine_motif],
-        "classifier": classify_motif_simple,
-    }
+    try:
+        # 修饰类型配置 - 使用普通函数以支持多进程pickle
+        inosine_base_dict = {"+": "A", "-": "T"}
+        inosine_motif_info = {
+            "patterns": [re.compile(r"TA[GT]")],
+            "extractors": [extract_inosine_motif],
+            "classifier": classify_motif_simple,
+        }
 
-    m5C_base_dict = {"+": "C", "-": "G"}
-    m5C_motif_info = {
-        "patterns": [
-            re.compile(r"C[ATC][ATC]"),  # CHH
-            re.compile(r"C[ATC]G"),  # CHG
-            re.compile(r"CG"),  # CG
-        ],
-        "extractors": [
-            extract_m5C_motif_3bp,  # CHH
-            extract_m5C_motif_3bp,  # CHG
-            extract_m5C_motif_2bp,  # CG
-        ],
-        "classifier": classify_motif_simple,
-        "classifier2": classify_m5C_motif,
-    }
+        m5C_base_dict = {"+": "C", "-": "G"}
+        m5C_motif_info = {
+            "patterns": [
+                re.compile(r"C[ATC][ATC]"),  # CHH
+                re.compile(r"C[ATC]G"),  # CHG
+                re.compile(r"CG"),  # CG
+            ],
+            "extractors": [
+                extract_m5C_motif_3bp,  # CHH
+                extract_m5C_motif_3bp,  # CHG
+                extract_m5C_motif_2bp,  # CG
+            ],
+            "classifier": classify_motif_simple,
+            "classifier2": classify_m5C_motif,
+        }
 
-    pseU_base_dict = {"+": "T", "-": "A"}
-    pseU_motif_info = {
-        "patterns": [
-            re.compile(r"GTTC[ATCG]A"),  # pus4 (索引 0)
-            re.compile(r"TGTA[AG]"),  # pus7 (索引 1)
-            re.compile(r"[ACT][AG]T"),  # pus1 (索引 2)
-        ],
-        "extractors": [
-            extract_pseU_pus1_motif,
-            extract_pseU_pus4_motif,
-            extract_pseU_pus7_motif,
-        ],
-        "classifier": classify_motif_simple,
-        "classifier2": classify_pseU_motif,
-    }
+        pseU_base_dict = {"+": "T", "-": "A"}
+        pseU_motif_info = {
+            "patterns": [
+                re.compile(r"GTTC[ATCG]A"),  # pus4 (索引 0)
+                re.compile(r"TGTA[AG]"),  # pus7 (索引 1)
+                re.compile(r"[ACT][AG]T"),  # pus1 (索引 2)
+            ],
+            "extractors": [
+                extract_pseU_pus1_motif,
+                extract_pseU_pus4_motif,
+                extract_pseU_pus7_motif,
+            ],
+            "classifier": classify_motif_simple,
+            "classifier2": classify_pseU_motif,
+        }
 
-    m6A_base_dict = {"+": "A", "-": "T"}
-    m6A_motif_info = {
-        "patterns": [re.compile(r"[GAT][GA]AC[ATC]")],
-        "extractors": [extract_m6A_motif],
-        "classifier": classify_motif_simple,
-    }
+        m6A_base_dict = {"+": "A", "-": "T"}
+        m6A_motif_info = {
+            "patterns": [re.compile(r"[GAT][GA]AC[ATC]")],
+            "extractors": [extract_m6A_motif],
+            "classifier": classify_motif_simple,
+        }
 
-    strand_dict = {"+": 0, "-": 1}
-    mod_dict = {
-        "m6A": ("A", strand_dict[args.strand], "a"),
-        "inosine": ("A", strand_dict[args.strand], 17596),
-        "m5C": ("C", strand_dict[args.strand], "m"),
-        "pseU": ("T", strand_dict[args.strand], 17802),
-    }
-    mod_info_summary = {
-        "m6A": m6A_motif_info,
-        "inosine": inosine_motif_info,
-        "m5C": m5C_motif_info,
-        "pseU": pseU_motif_info,
-    }
-    mod_base_dict_summary = {
-        "m6A": m6A_base_dict,
-        "inosine": inosine_base_dict,
-        "m5C": m5C_base_dict,
-        "pseU": pseU_base_dict,
-    }
+        strand_dict = {"+": 0, "-": 1}
+        mod_dict = {
+            "m6A": ("A", strand_dict[args.strand], "a"),
+            "inosine": ("A", strand_dict[args.strand], 17596),
+            "m5C": ("C", strand_dict[args.strand], "m"),
+            "pseU": ("T", strand_dict[args.strand], 17802),
+        }
+        mod_info_summary = {
+            "m6A": m6A_motif_info,
+            "inosine": inosine_motif_info,
+            "m5C": m5C_motif_info,
+            "pseU": pseU_motif_info,
+        }
+        mod_base_dict_summary = {
+            "m6A": m6A_base_dict,
+            "inosine": inosine_base_dict,
+            "m5C": m5C_base_dict,
+            "pseU": pseU_base_dict,
+        }
 
-    # 执行并行处理
-    if args.motif:
-        n = f"_{args.mod_type}_motif"
-        read_mod_set = get_read_modify_parallel(
-            args.bam,
-            args.mod_threshold,
-            args.min_qscore,
-            args.min_mapq,
-            args.threads,
-            args.strand,
-            mod_dict[args.mod_type],
-            motif_info=mod_info_summary[args.mod_type],
+        # 执行并行处理
+        if args.motif:
+            n = f"_{args.mod_type}_motif"
+            read_mod_set = get_read_modify_parallel(
+                args.bam,
+                args.mod_threshold,
+                args.min_qscore,
+                args.min_mapq,
+                args.threads,
+                args.strand,
+                mod_dict[args.mod_type],
+                motif_info=mod_info_summary[args.mod_type],
+            )
+        else:
+            n = f"_{args.mod_type}_base"
+            read_mod_set = get_read_modify_parallel(
+                args.bam,
+                args.mod_threshold,
+                args.min_qscore,
+                args.min_mapq,
+                args.threads,
+                args.strand,
+                mod_dict[args.mod_type],
+                base_dict=mod_base_dict_summary[args.mod_type],
+            )
+
+        read_mod_file = (
+            f"{args.output_prefix}_{'f' if args.strand == '+' else 'r'}{n}_tmp.txt"
         )
-    else:
-        n = f"_{args.mod_type}_base"
-        read_mod_set = get_read_modify_parallel(
-            args.bam,
-            args.mod_threshold,
-            args.min_qscore,
-            args.min_mapq,
-            args.threads,
-            args.strand,
-            mod_dict[args.mod_type],
-            base_dict=mod_base_dict_summary[args.mod_type],
-        )
+        
+        print(f"\n正在保存结果到: {read_mod_file}")
+        with open(read_mod_file, "w") as file:
+            for item in read_mod_set:
+                file.write(f"{item}\n")
+        
+        print(f"✓ 完成! 结果已保存")
+        print("="*60)
+        pass
 
-    read_mod_file = (
-        f"{args.output_prefix}_{'f' if args.strand == '+' else 'r'}{n}_tmp.txt"
-    )
-    
-    print(f"\n正在保存结果到: {read_mod_file}")
-    with open(read_mod_file, "w") as file:
-        for item in read_mod_set:
-            file.write(f"{item}\n")
-    
-    print(f"✓ 完成! 结果已保存")
-    print("="*60)
+    except Exception as e:
+        print(f"错误: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)

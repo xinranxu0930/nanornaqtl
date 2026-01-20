@@ -98,56 +98,82 @@ def process_gtf(gtf_file, output_dir):
 def identify_valid_reads(bam_file, output_dir):
     print("开始识别有效reads...")
 
+    # 检查必需文件是否存在
+    gene_merge_bed = f"{output_dir}/gene_merge.bed"
+    exon_merge_bed = f"{output_dir}/exon_merge.bed"
+    
+    if not os.path.exists(gene_merge_bed):
+        raise FileNotFoundError(f"文件不存在: {gene_merge_bed}")
+    if not os.path.exists(exon_merge_bed):
+        raise FileNotFoundError(f"文件不存在: {exon_merge_bed}")
+
     # 生成必要的基因/外显子文件
-    call(
-        f"bedtools intersect -a {output_dir}/gene_merge.bed -b {output_dir}/exon_merge.bed -s -wa -wb > {output_dir}/fully_overlapped_genes.bed",
+    fully_overlapped_file = f"{output_dir}/fully_overlapped_genes.bed"
+    ret = call(
+        f"bedtools intersect -a {gene_merge_bed} -b {exon_merge_bed} -s -wa -wb > {fully_overlapped_file}",
         shell=True,
     )
-    df = pd.read_csv(
-        f"{output_dir}/fully_overlapped_genes.bed",
-        sep="\t",
-        header=None,
-        usecols=[0, 1, 2, 3, 4, 5, 7, 8],
-        names=["chr", "start", "end", "gene", "score", "strand", "s_t", "e_t"],
-    )
-    df_no_intron = df[(df["start"] == df["s_t"]) & (df["end"] == df["e_t"])].copy()
-    df_no_intron = df_no_intron.drop(["s_t", "e_t"], axis=1)
-    df_no_intron.to_csv(
-        f"{output_dir}/genes_no_intron.bed", sep="\t", index=False, header=False
-    )
-    call(f"rm {output_dir}/fully_overlapped_genes.bed", shell=True)
+    if ret != 0:
+        raise RuntimeError(f"bedtools intersect 命令失败，返回码: {ret}")
+    
+    if not os.path.exists(fully_overlapped_file) or os.path.getsize(fully_overlapped_file) == 0:
+        print("警告: fully_overlapped_genes.bed 为空，可能没有完全重叠的基因")
+        # 创建空的 genes_no_intron.bed
+        open(f"{output_dir}/genes_no_intron.bed", 'w').close()
+    else:
+        df = pd.read_csv(
+            fully_overlapped_file,
+            sep="\t",
+            header=None,
+            usecols=[0, 1, 2, 3, 4, 5, 7, 8],
+            names=["chr", "start", "end", "gene", "score", "strand", "s_t", "e_t"],
+        )
+        df_no_intron = df[(df["start"] == df["s_t"]) & (df["end"] == df["e_t"])].copy()
+        df_no_intron = df_no_intron.drop(["s_t", "e_t"], axis=1)
+        df_no_intron.to_csv(
+            f"{output_dir}/genes_no_intron.bed", sep="\t", index=False, header=False
+        )
+    
+    # 清理临时文件
+    if os.path.exists(fully_overlapped_file):
+        os.remove(fully_overlapped_file)
     
     # 使用管道和命令行工具处理readID
     # 1. 获取所有reads的ID，并排序去重
     print("获取所有read IDs...")
-    call(
+    ret = call(
         f"bedtools bamtobed -i {bam_file} | cut -f 4 | sort -u > {output_dir}/all_reads.txt",
         shell=True,
     )
+    if ret != 0:
+        raise RuntimeError(f"获取all_reads失败，返回码: {ret}")
 
     # 2. 获取没有比对到基因上的reads的ID
     print("获取未比对到基因的read IDs...")
-    call(
+    ret = call(
         f"bash -c 'bedtools subtract -a <(bedtools bamtobed -i {bam_file}) -b {output_dir}/gene_merge.bed -A -s | cut -f 4 | sort -u > {output_dir}/read_no_gene.txt'",
         shell=True,
     )
+    if ret != 0:
+        raise RuntimeError(f"获取read_no_gene失败，返回码: {ret}")
 
     # 3. 获取比对到无内含子基因上的reads的ID
     print("获取比对到无内含子基因的read IDs...")
-    call(
-        f"bedtools intersect -a <(bedtools bamtobed -i {bam_file}) -b {output_dir}/genes_no_intron.bed -s -wa | cut -f 4 | sort -u > {output_dir}/read_gene_no_intron.txt",
+    ret = call(
+        f"bash -c 'bedtools intersect -a <(bedtools bamtobed -i {bam_file}) -b {output_dir}/genes_no_intron.bed -s -wa | cut -f 4 | sort -u > {output_dir}/read_gene_no_intron.txt'",
         shell=True,
     )
+    if ret != 0:
+        # 如果genes_no_intron.bed为空，创建空文件
+        open(f"{output_dir}/read_gene_no_intron.txt", 'w').close()
     
     # 4. 使用comm命令高效地找出差集
-    # 先合并两个要排除的ID集合
     print("合并无效read IDs...")
     call(
         f"cat {output_dir}/read_no_gene.txt {output_dir}/read_gene_no_intron.txt | sort -u > {output_dir}/invalid_reads.txt",
         shell=True
     )
     
-    # comm -23 file1 file2 会打印出只在file1中存在的行
     print("计算有效read IDs...")
     call(
         f"comm -23 {output_dir}/all_reads.txt {output_dir}/invalid_reads.txt > {output_dir}/valid_readID.txt",
@@ -155,7 +181,11 @@ def identify_valid_reads(bam_file, output_dir):
     )
     
     # 清理中间的ID文件
-    call(f"rm {output_dir}/all_reads.txt {output_dir}/read_no_gene.txt {output_dir}/read_gene_no_intron.txt {output_dir}/invalid_reads.txt {output_dir}/genes_no_intron.bed", shell=True)
+    for f in ["all_reads.txt", "read_no_gene.txt", "read_gene_no_intron.txt", "invalid_reads.txt", "genes_no_intron.bed"]:
+        fpath = f"{output_dir}/{f}"
+        if os.path.exists(fpath):
+            os.remove(fpath)
+    
     print("有效reads识别完成!")
 
 

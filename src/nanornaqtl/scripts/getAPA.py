@@ -2,6 +2,7 @@ import pysam
 from subprocess import call
 import argparse
 import pandas as pd
+import sys
 
 def get_apa(bamfile, strand):
     res_dict = set()
@@ -31,22 +32,27 @@ Data Format Description:
     parser.add_argument("-o", "--output_prefix", type=str, required=True, help="Output prefix")
     parser.add_argument("-a","--apa_file", type=str, help="APA File from APAdb")
     args = parser.parse_args()
+    try:
+        bam0 = args.bam.replace(".bam", "0.bam")
+        bam16 = args.bam.replace(".bam", "16.bam")
 
-    bam0 = args.bam.replace(".bam", "0.bam")
-    bam16 = args.bam.replace(".bam", "16.bam")
+        res_dict_0 = get_apa(bam0, "+")
+        res_dict_16 = get_apa(bam16, "-")
 
-    res_dict_0 = get_apa(bam0, "+")
-    res_dict_16 = get_apa(bam16, "-")
+        merged_set = res_dict_0.union(res_dict_16)
 
-    merged_set = res_dict_0.union(res_dict_16)
+        # 将集合内容写入BED文件
+        with open(f'{args.output_prefix}_readend.bed', 'w') as file:
+            for item in merged_set:
+                file.write('\t'.join(map(str, item)) + '\n')
 
-    # 将集合内容写入BED文件
-    with open(f'{args.output_prefix}_readend.bed', 'w') as file:
-        for item in merged_set:
-            file.write('\t'.join(map(str, item)) + '\n')
-
-    call(f'bedtools intersect -s -a {args.output_prefix}_readend.bed -b {args.apa_file} -wa -wb> {args.output_prefix}_overlap.bed',shell=True)
-    apa_sites = pd.read_csv(f'{args.output_prefix}_overlap.bed', sep='\t', header=None, usecols=[3,9])
-    apa_sites.columns = ["readID","APA_type"]
-    apa_sites.to_csv(f'{args.output_prefix}_APA_result.csv', index=False)
-    call(f'rm {args.output_prefix}_readend.bed {args.output_prefix}_overlap.bed',shell=True)
+        call(f'bedtools intersect -s -a {args.output_prefix}_readend.bed -b {args.apa_file} -wa -wb> {args.output_prefix}_overlap.bed',shell=True)
+        apa_sites = pd.read_csv(f'{args.output_prefix}_overlap.bed', sep='\t', header=None, usecols=[3,9])
+        apa_sites.columns = ["readID","APA_type"]
+        apa_sites.to_csv(f'{args.output_prefix}_APA_result.csv', index=False)
+        call(f'rm {args.output_prefix}_readend.bed {args.output_prefix}_overlap.bed',shell=True)
+    except Exception as e:
+        print(f"错误: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)

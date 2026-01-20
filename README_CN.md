@@ -68,6 +68,8 @@ poetry install
 - pandas
 - numpy
 - scipy
+- logomaker
+- biopython
 
 ---
 

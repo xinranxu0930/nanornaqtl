@@ -3,46 +3,89 @@ import sys
 import os
 import subprocess
 import threading
+import logging
+from datetime import datetime
+
+def setup_logging(output_dir, prefix):
+    """
+    设置日志系统，将子脚本输出写入日志文件
+    """
+    log_file = os.path.join(output_dir, f"{prefix}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
+    
+    # 创建logger
+    logger = logging.getLogger('nanornaqtl')
+    logger.setLevel(logging.DEBUG)
+    
+    # 文件handler - 记录所有信息
+    file_handler = logging.FileHandler(log_file, encoding='utf-8')
+    file_handler.setLevel(logging.DEBUG)
+    file_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    file_handler.setFormatter(file_formatter)
+    
+    # 清除已有的handlers
+    logger.handlers.clear()
+    logger.addHandler(file_handler)
+    
+    return logger, log_file
 
 
-def run_command(command_list, description=None, working_dir=None):
+def run_command(command_list, description=None, working_dir=None, logger=None):
     """
-    一个健壮的辅助函数，用于执行外部shell命令。
-    - command_list: 命令及其参数的列表。
-    - description: 命令的描述，用于在输出中显示。
-    - working_dir: 命令的执行目录。
+    执行外部shell命令，捕获输出到日志文件
+    - command_list: 命令及其参数的列表
+    - description: 命令的描述
+    - working_dir: 命令的执行目录
+    - logger: 日志记录器
     """
-    # print(f"执行命令: {' '.join(command_list)}")
     if description:
         print(f"执行命令: {description}")
+    
+    if logger:
+        logger.info(f"执行命令: {' '.join(command_list)}")
+    
     try:
-        # 使用run执行命令，并捕获输出用于调试
         result = subprocess.run(
             command_list,
-            check=True,  # 如果命令返回非零退出码，则抛出异常
-            text=True,  # 以文本模式处理输出
-            capture_output=True,  # 捕获标准输出和标准错误
-            cwd=working_dir,  # 在指定目录下执行命令
+            check=True,
+            text=True,
+            capture_output=True,
+            cwd=working_dir,
         )
-        # 如果需要，可以打印命令的输出日志
-        # print(result.stdout)
-        # print(result.stderr)
+        
+        # 将子脚本的stdout和stderr写入日志
+        if logger:
+            if result.stdout:
+                logger.info(f"[STDOUT]\n{result.stdout}")
+            if result.stderr:
+                logger.warning(f"[STDERR]\n{result.stderr}")
+        
         print("命令执行成功。\n")
 
     except FileNotFoundError:
-        print(f"错误: 命令 '{command_list[0]}' 未找到。", file=sys.stderr)
-        print(
-            "请确保所需软件（如pysam, samtools）已安装并在系统的PATH中。",
-            file=sys.stderr,
-        )
+        error_msg = f"错误: 命令 '{command_list[0]}' 未找到。请确保所需软件已安装并在系统的PATH中。"
+        print(error_msg, file=sys.stderr)
+        if logger:
+            logger.error(error_msg)
         sys.exit(1)
+        
     except subprocess.CalledProcessError as e:
-        # 如果命令执行失败，打印详细的错误信息
-        print(f"错误：命令执行失败！", file=sys.stderr)
-        print(f"  命令: {' '.join(e.cmd)}", file=sys.stderr)
-        print(f"  返回码: {e.returncode}", file=sys.stderr)
-        print(f"  标准输出 (stdout):\n{e.stdout}", file=sys.stderr)
-        print(f"  标准错误 (stderr):\n{e.stderr}", file=sys.stderr)
+        error_msg = f"错误：命令执行失败！\n  命令: {' '.join(e.cmd)}\n  返回码: {e.returncode}"
+        print(error_msg, file=sys.stderr)
+        
+        if logger:
+            logger.error(error_msg)
+            if e.stdout:
+                logger.error(f"[STDOUT]\n{e.stdout}")
+            if e.stderr:
+                logger.error(f"[STDERR]\n{e.stderr}")
+        
+        # 打印简要错误信息到控制台
+        print(f"  详细错误信息已写入日志文件", file=sys.stderr)
+        if e.stderr:
+            # 只打印stderr的最后几行到控制台
+            stderr_lines = e.stderr.strip().split('\n')
+            print(f"  错误摘要: {stderr_lines[-1] if stderr_lines else 'Unknown error'}", file=sys.stderr)
+        
         sys.exit(1)
 
 
@@ -55,16 +98,22 @@ def run_prep_workflow(args):
     print(f"  nanornaqtl: 'prep' 工作流启动")
     print("==============================================")
 
+    # 设置输出目录（提前，因为日志需要）
+    output_dir_path = os.path.abspath(args.output_dir)
+    os.makedirs(output_dir_path, exist_ok=True)
+    
+    # 设置日志系统
+    logger, log_file = setup_logging(output_dir_path, args.prefix)
+    print(f"日志文件: {log_file}")
+    logger.info(f"开始 prep 工作流")
+    logger.info(f"参数: {vars(args)}")
+
     # --- 1. 准备路径和文件名 ---
 
     # 获取用户输入的参数，并将路径转换为绝对路径
     input_bam_path = os.path.abspath(args.bam)
-    output_dir_path = os.path.abspath(args.output_dir)
     prefix = args.prefix
     threads = str(args.threads)
-
-    # 确保输出目录存在
-    os.makedirs(output_dir_path, exist_ok=True)
 
     # print("--- 步骤 1: 预排序输入的BAM文件 ---")
     tmp_sorted_bam_name = f"{prefix}_tmp_sorted.bam"
@@ -80,7 +129,7 @@ def run_prep_workflow(args):
         input_bam_path,
     ]
     run_command(
-        cmd_sort, description="预排序输入的BAM文件...", working_dir=output_dir_path
+        cmd_sort, description="预排序输入的BAM文件...", working_dir=output_dir_path, logger=logger
     )
 
     # 为排序后的临时BAM建立索引，以供pysam使用
@@ -88,6 +137,7 @@ def run_prep_workflow(args):
         ["samtools", "index", tmp_sorted_bam_path],
         description="为排序后的临时BAM建立索引...",
         working_dir=output_dir_path,
+        logger=logger
     )
 
     # 构建所有需要用到的文件名
@@ -136,16 +186,19 @@ def run_prep_workflow(args):
         ["samtools", "index", map0_bam],
         description="为正链BAM建立索引...",
         working_dir=output_dir_path,
+        logger=logger
     )
     run_command(
         ["samtools", "index", map16_bam],
         description="为反链BAM建立索引...",
         working_dir=output_dir_path,
+        logger=logger
     )
     run_command(
         ["samtools", "index", map_bam],
         description="为最终BAM建立索引...",
         working_dir=output_dir_path,
+        logger=logger
     )
 
     # 步骤 3: 从最终的比对BAM中提取FASTQ
@@ -154,6 +207,7 @@ def run_prep_workflow(args):
         cmd_fastq,
         description="从最终的比对BAM中提取FASTQ...",
         working_dir=output_dir_path,
+        logger=logger
     )
 
     # --- 3. 清理临时文件 ---
@@ -171,6 +225,7 @@ def run_prep_workflow(args):
     print("\n==============================================")
     print("  'prep' 工作流全部执行完毕！")
     print(f"  所有输出文件已生成在: {output_dir_path}")
+    print(f"  日志文件: {log_file}")
     print("==============================================")
 
 
@@ -187,7 +242,6 @@ def validate_phenotype_parameters(args):
 def run_pheno_workflow(args):
     """
     pheno 功能的核心工作流。
-    根据用户指定的分子表型运行相应的分析流程。
     """
     print("==============================================")
     print(f"  nanornaqtl: 'pheno' 工作流启动")
@@ -196,13 +250,8 @@ def run_pheno_workflow(args):
 
     # 支持的分子表型列表
     allowed_phenotypes = {
-        "m6A",
-        "m5C",
-        "pseU",
-        "inosine",
-        "polyA_tail",
-        "APA",
-        "intron_retention",
+        "m6A", "m5C", "pseU", "inosine",
+        "polyA_tail", "APA", "intron_retention",
     }
 
     if args.phenotype not in allowed_phenotypes:
@@ -212,7 +261,14 @@ def run_pheno_workflow(args):
         )
         sys.exit(1)
 
-    # 验证每种分子表型所需的参数
+    # 验证 motifPaint 和 motif 参数的组合
+    if hasattr(args, 'motifPaint') and hasattr(args, 'motif'):
+        if args.motifPaint and not args.motif:
+            print("⚠️  警告: --motifPaint 需要配合 --motif 使用")
+            print("   当前未指定 --motif，将按 base 模式运行，跳过 motifPaint")
+            args.motifPaint = False
+
+    # 验证参数
     validate_phenotype_parameters(args)
 
     # 获取脚本路径
@@ -223,23 +279,30 @@ def run_pheno_workflow(args):
     output_dir = os.path.abspath(args.output_dir)
     os.makedirs(output_dir, exist_ok=True)
 
+    # 设置日志系统
+    logger, log_file = setup_logging(output_dir, args.prefix)
+    print(f"日志文件: {log_file}")
+    logger.info(f"开始 {args.phenotype} 分子表型分析")
+    logger.info(f"参数: {vars(args)}")
+
     # 根据分子表型执行相应的分析流程
     if args.phenotype in ["m6A", "m5C", "pseU", "inosine"]:
-        run_modification_analysis(args, scripts_dir, output_dir)
+        run_modification_analysis(args, scripts_dir, output_dir, logger)
     elif args.phenotype == "polyA_tail":
-        run_polyA_analysis(args, scripts_dir, output_dir)
+        run_polyA_analysis(args, scripts_dir, output_dir, logger)
     elif args.phenotype == "APA":
-        run_APA_analysis(args, scripts_dir, output_dir)
+        run_APA_analysis(args, scripts_dir, output_dir, logger)
     elif args.phenotype == "intron_retention":
-        run_intron_retention_analysis(args, scripts_dir, output_dir)
+        run_intron_retention_analysis(args, scripts_dir, output_dir, logger)
 
     print("\n==============================================")
     print(f"  '{args.phenotype}' 分子表型分析全部执行完毕！")
     print(f"  所有输出文件已生成在: {output_dir}")
+    print(f"  日志文件: {log_file}")
     print("==============================================")
 
 
-def run_modification_analysis(args, scripts_dir, output_dir):
+def run_modification_analysis(args, scripts_dir, output_dir, logger):
     """
     运行修饰位点分析（m6A, m5C, pseU, inosine）
     需要3步：pileupRead.py → calculateModRate.py → mergeModSites.py
@@ -285,7 +348,7 @@ def run_modification_analysis(args, scripts_dir, output_dir):
         cmd_pos.append("--motif")
 
     run_command(
-        cmd_pos, description=f"获取{phenotype}修饰位点（正链）", working_dir=output_dir
+        cmd_pos, description=f"获取{phenotype}修饰位点（正链）", working_dir=output_dir, logger=logger
     )
 
     # 负链分析 (strand -)
@@ -305,7 +368,7 @@ def run_modification_analysis(args, scripts_dir, output_dir):
         cmd_neg.append("--motif")
 
     run_command(
-        cmd_neg, description=f"获取{phenotype}修饰位点（负链）", working_dir=output_dir
+        cmd_neg, description=f"获取{phenotype}修饰位点（负链）", working_dir=output_dir, logger=logger
     )
 
     # 第二步：运行calculateModRate.py计算修饰率
@@ -341,6 +404,7 @@ def run_modification_analysis(args, scripts_dir, output_dir):
         cmd_calc_pos,
         description=f"计算{phenotype}修饰率（正链）",
         working_dir=output_dir,
+        logger=logger
     )
 
     # 负链计算修饰率
@@ -361,6 +425,7 @@ def run_modification_analysis(args, scripts_dir, output_dir):
         cmd_calc_neg,
         description=f"计算{phenotype}修饰率（负链）",
         working_dir=output_dir,
+        logger=logger
     )
 
     # 第三步：合并正负链结果并绘制motif图
@@ -377,8 +442,12 @@ def run_modification_analysis(args, scripts_dir, output_dir):
         os.path.abspath(args.fasta),
     ]
 
-    if args.motifPaint:
+    if args.motifPaint and args.motif:
         cmd_merge.append("--motifPaint")
+    elif args.motifPaint and not args.motif:
+        print("⚠️  警告: --motifPaint 需要配合 --motif 使用")
+        print("   当前未指定 --motif，将按 base 模式运行，跳过 motifPaint")
+
     if args.metaPlotR:
         cmd_merge.append("--metaPlotR")
 
@@ -386,10 +455,11 @@ def run_modification_analysis(args, scripts_dir, output_dir):
         cmd_merge,
         description=f"合并{phenotype}结果并生成motif图",
         working_dir=output_dir,
+        logger=logger
     )
 
 
-def run_polyA_analysis(args, scripts_dir, output_dir):
+def run_polyA_analysis(args, scripts_dir, output_dir, logger):
     """运行polyA长度分析"""
     print("--- 运行polyA长度分析 ---")
 
@@ -406,10 +476,10 @@ def run_polyA_analysis(args, scripts_dir, output_dir):
         str(args.threads),
     ]
 
-    run_command(cmd, description="分析polyA长度", working_dir=output_dir)
+    run_command(cmd, description="分析polyA长度", working_dir=output_dir, logger=logger)
 
 
-def run_APA_analysis(args, scripts_dir, output_dir):
+def run_APA_analysis(args, scripts_dir, output_dir, logger):
     """运行APA分析"""
     print("--- 运行APA分析 ---")
 
@@ -426,10 +496,10 @@ def run_APA_analysis(args, scripts_dir, output_dir):
         os.path.abspath(args.apadb),
     ]
 
-    run_command(cmd, description="分析APA", working_dir=output_dir)
+    run_command(cmd, description="分析APA", working_dir=output_dir, logger=logger)
 
 
-def run_intron_retention_analysis(args, scripts_dir, output_dir):
+def run_intron_retention_analysis(args, scripts_dir, output_dir, logger):
     """运行内含子滞留率分析"""
     print("--- 运行内含子滞留率分析 ---")
 
@@ -448,7 +518,7 @@ def run_intron_retention_analysis(args, scripts_dir, output_dir):
         args.prefix,
     ]
 
-    run_command(cmd, description="分析内含子滞留率", working_dir=output_dir)
+    run_command(cmd, description="分析内含子滞留率", working_dir=output_dir, logger=logger)
 
 
 def run_qtl_workflow(args):
@@ -834,7 +904,6 @@ def main():
     parser_m6a.add_argument(
         "-f", "--fasta", required=True, help="参考基因组fasta文件路径"
     )
-    # pileupRead.py相关参数
     parser_m6a.add_argument(
         "--mod_threshold", type=float, default=0.75, help="修饰阈值（默认: 0.75）"
     )
@@ -844,7 +913,6 @@ def main():
         default=10,
         help="修饰位点最小碱基质量分数（默认: 10）",
     )
-    # calculateModRate.py相关参数
     parser_m6a.add_argument(
         "--min_rate", type=float, default=0.1, help="修饰位点最小修饰率（默认: 0.1）"
     )
@@ -872,7 +940,6 @@ def main():
     parser_m5c.add_argument(
         "-f", "--fasta", required=True, help="参考基因组fasta文件路径"
     )
-    # pileupRead.py相关参数
     parser_m5c.add_argument(
         "--mod_threshold", type=float, default=0.75, help="修饰阈值（默认: 0.75）"
     )
@@ -882,7 +949,6 @@ def main():
         default=10,
         help="修饰位点最小碱基质量分数（默认: 10）",
     )
-    # calculateModRate.py相关参数
     parser_m5c.add_argument(
         "--min_rate", type=float, default=0.1, help="修饰位点最小修饰率（默认: 0.1）"
     )
@@ -910,7 +976,6 @@ def main():
     parser_pseu.add_argument(
         "-f", "--fasta", required=True, help="参考基因组fasta文件路径"
     )
-    # pileupRead.py相关参数
     parser_pseu.add_argument(
         "--mod_threshold", type=float, default=0.75, help="修饰阈值（默认: 0.75）"
     )
@@ -920,7 +985,6 @@ def main():
         default=10,
         help="修饰位点最小碱基质量分数（默认: 10）",
     )
-    # calculateModRate.py相关参数
     parser_pseu.add_argument(
         "--min_rate", type=float, default=0.1, help="修饰位点最小修饰率（默认: 0.1）"
     )
@@ -948,7 +1012,6 @@ def main():
     parser_inosine.add_argument(
         "-f", "--fasta", required=True, help="参考基因组fasta文件路径"
     )
-    # pileupRead.py相关参数
     parser_inosine.add_argument(
         "--mod_threshold", type=float, default=0.75, help="修饰阈值（默认: 0.75）"
     )
@@ -958,7 +1021,6 @@ def main():
         default=10,
         help="修饰位点最小碱基质量分数（默认: 10）",
     )
-    # calculateModRate.py相关参数
     parser_inosine.add_argument(
         "--min_rate", type=float, default=0.1, help="修饰位点最小修饰率（默认: 0.1）"
     )

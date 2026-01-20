@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 from Bio import SeqIO
 import argparse
 import warnings
+import sys
 
 
 def fasta_iter(fasta_name):
@@ -202,63 +203,69 @@ def process_m6A(df, args):
         plot_motif_logo(df, 5, motif_path)
         print(f"m6A motif plot saved to {motif_path}")
 
-    return df[["chrom", "pos_1base", "strand", "mod_num", "cov", "mod_rate", "motif"]]
+    output_cols = ["chrom", "pos_1base", "strand", "mod_num", "cov", "mod_rate"]
+    if "motif" in df.columns:
+        output_cols.append("motif")
+    return df[output_cols]
 
 
 def process_m5C(df, args):
     """处理m5C修饰"""
-    # 使用copy()确保我们操作的是副本
-    df_CG = df[df["motif_classification"] == "CG"].copy()
-    df_CHH = df[df["motif_classification"] == "CHH"].copy()
-    df_CHG = df[df["motif_classification"] == "CHG"].copy()
-
     processed_dfs = []
+    
+    # 检查是否有motif_classification列（motif模式）
+    if "motif_classification" in df.columns:
+        df_CG = df[df["motif_classification"] == "CG"].copy()
+        df_CHH = df[df["motif_classification"] == "CHH"].copy()
+        df_CHG = df[df["motif_classification"] == "CHG"].copy()
 
-    if not df_CG.empty:
-        df_CG = get_motif(
-            df_CG, 0, 1, "CG", args.fa, args.output_prefix, args.modification_type
-        )
-        df_CG = check_base(
-            args.output_prefix, df_CG, "CG", 0, "C", args.modification_type
-        )
-        processed_dfs.append(df_CG)
-    if not df_CHH.empty:
-        df_CHH = get_motif(
-            df_CHH, 0, 2, "CHH", args.fa, args.output_prefix, args.modification_type
-        )
-        df_CHH = check_base(
-            args.output_prefix, df_CHH, "CHH", 0, "C", args.modification_type
-        )
-        processed_dfs.append(df_CHH)
-    if not df_CHG.empty:
-        df_CHG = get_motif(
-            df_CHG, 0, 2, "CHG", args.fa, args.output_prefix, args.modification_type
-        )
-        df_CHG = check_base(
-            args.output_prefix, df_CHG, "CHG", 0, "C", args.modification_type
-        )
-        processed_dfs.append(df_CHG)
+        if not df_CG.empty:
+            df_CG = get_motif(
+                df_CG, 0, 1, "CG", args.fa, args.output_prefix, args.modification_type
+            )
+            df_CG = check_base(
+                args.output_prefix, df_CG, "CG", 0, "C", args.modification_type
+            )
+            processed_dfs.append(df_CG)
+        if not df_CHH.empty:
+            df_CHH = get_motif(
+                df_CHH, 0, 2, "CHH", args.fa, args.output_prefix, args.modification_type
+            )
+            df_CHH = check_base(
+                args.output_prefix, df_CHH, "CHH", 0, "C", args.modification_type
+            )
+            processed_dfs.append(df_CHH)
+        if not df_CHG.empty:
+            df_CHG = get_motif(
+                df_CHG, 0, 2, "CHG", args.fa, args.output_prefix, args.modification_type
+            )
+            df_CHG = check_base(
+                args.output_prefix, df_CHG, "CHG", 0, "C", args.modification_type
+            )
+            processed_dfs.append(df_CHG)
+    else:
+        # base模式：不按motif分类，直接处理所有位点
+        df = get_motif(df, 0, 1, "m5C", args.fa, args.output_prefix, args.modification_type)
+        df = check_base(args.output_prefix, df, "m5C", 0, "C", args.modification_type)
+        processed_dfs.append(df)
 
     if processed_dfs:
         merged_df = pd.concat(processed_dfs, ignore_index=True)
-        return merged_df[
-            [
-                "chrom",
-                "pos_1base",
-                "strand",
-                "mod_num",
-                "cov",
-                "mod_rate",
-                "motif",
-                "motif_classification",
-            ]
-        ]
+        output_cols = ["chrom", "pos_1base", "strand", "mod_num", "cov", "mod_rate"]
+        if "motif" in merged_df.columns:
+            output_cols.append("motif")
+        if "motif_classification" in merged_df.columns:
+            output_cols.append("motif_classification")
+        return merged_df[output_cols]
     else:
         return pd.DataFrame()
 
 
 def process_pseU(df, args):
-    # 使用motif_classification分组(更准确)
+    """处理pseU修饰"""
+    processed_dfs = []
+    
+    # 检查是否有motif_classification列（motif模式）
     if 'motif_classification' in df.columns:
         print("使用motif_classification列进行分组")
         df1 = df[df['motif_classification'] == 'pus1'].copy()
@@ -268,69 +275,64 @@ def process_pseU(df, args):
         print(f"  pus1: {len(df1)} 个位点")
         print(f"  pus4: {len(df4)} 个位点")
         print(f"  pus7: {len(df7)} 个位点")
-    else:
-        # 回退到按motif长度分组(兼容旧数据)
-        print("警告: 没有motif_classification列,使用motif长度分组")
-        df1 = df[df["motif"].apply(lambda x: len(x) == 3)].copy()
-        df7 = df[df["motif"].apply(lambda x: len(x) == 5)].copy()
-        df4 = df[df["motif"].apply(lambda x: len(x) == 6)].copy()
-        
-        print(f"  长度=3 (pus1): {len(df1)} 个位点")
-        print(f"  长度=5 (pus7): {len(df7)} 个位点")
-        print(f"  长度=6 (pus4): {len(df4)} 个位点")
 
-    processed_dfs = []
+        if not df1.empty:
+            df1 = get_motif(
+                df1, 2, 0, "pus1", args.fa, args.output_prefix, args.modification_type
+            )
+            df1 = check_base(
+                args.output_prefix, df1, "pus1", 2, "T", args.modification_type
+            )
+            processed_dfs.append(df1)
+            if args.motifPaint:
+                pus1_path = f"{args.output_prefix}_pseU_motif_pus1.pdf"
+                plot_motif_logo(df1, 3, pus1_path)
+                print(f"PUS1 motif plot saved to {pus1_path}")
+        else:
+            print("No PUS1 motif found for pseU")
 
-    if not df1.empty:
-        df1 = get_motif(
-            df1, 2, 0, "pus1", args.fa, args.output_prefix, args.modification_type
-        )
-        df1 = check_base(
-            args.output_prefix, df1, "pus1", 2, "T", args.modification_type
-        )
-        processed_dfs.append(df1)
-        if args.motifPaint:
-            pus1_path = f"{args.output_prefix}_pseU_motif_pus1.pdf"
-            plot_motif_logo(df1, 3, pus1_path)
-            print(f"PUS1 motif plot saved to {pus1_path}")
-    else:
-        print("No PUS1 motif found for pseU")
+        if not df4.empty:
+            df4 = get_motif(
+                df4, 2, 3, "pus4", args.fa, args.output_prefix, args.modification_type
+            )
+            df4 = check_base(
+                args.output_prefix, df4, "pus4", 2, "T", args.modification_type
+            )
+            processed_dfs.append(df4)
+            if args.motifPaint:
+                pus4_path = f"{args.output_prefix}_pseU_motif_pus4.pdf"
+                plot_motif_logo(df4, 6, pus4_path)
+                print(f"PUS4 motif plot saved to {pus4_path}")
+        else:
+            print("No PUS4 motif found for pseU")
 
-    if not df4.empty:
-        df4 = get_motif(
-            df4, 2, 3, "pus4", args.fa, args.output_prefix, args.modification_type
-        )
-        df4 = check_base(
-            args.output_prefix, df4, "pus4", 2, "T", args.modification_type
-        )
-        processed_dfs.append(df4)
-        if args.motifPaint:
-            pus4_path = f"{args.output_prefix}_pseU_motif_pus4.pdf"
-            plot_motif_logo(df4, 6, pus4_path)
-            print(f"PUS4 motif plot saved to {pus4_path}")
+        if not df7.empty:
+            df7 = get_motif(
+                df7, 2, 2, "pus7", args.fa, args.output_prefix, args.modification_type
+            )
+            df7 = check_base(
+                args.output_prefix, df7, "pus7", 2, "T", args.modification_type
+            )
+            processed_dfs.append(df7)
+            if args.motifPaint:
+                pus7_path = f"{args.output_prefix}_pseU_motif_pus7.pdf"
+                plot_motif_logo(df7, 5, pus7_path)
+                print(f"PUS7 motif plot saved to {pus7_path}")
+        else:
+            print("No PUS7 motif found for pseU")
     else:
-        print("No PUS4 motif found for pseU")
-
-    if not df7.empty:
-        df7 = get_motif(
-            df7, 2, 2, "pus7", args.fa, args.output_prefix, args.modification_type
-        )
-        df7 = check_base(
-            args.output_prefix, df7, "pus7", 2, "T", args.modification_type
-        )
-        processed_dfs.append(df7)
-        if args.motifPaint:
-            pus7_path = f"{args.output_prefix}_pseU_motif_pus7.pdf"
-            plot_motif_logo(df7, 5, pus7_path)
-            print(f"PUS7 motif plot saved to {pus7_path}")
-    else:
-        print("No PUS7 motif found for pseU")
+        # base模式：不按motif分类，直接处理所有位点
+        print("base模式：不按motif分类处理")
+        df = get_motif(df, 2, 0, "pseU", args.fa, args.output_prefix, args.modification_type)
+        df = check_base(args.output_prefix, df, "pseU", 2, "T", args.modification_type)
+        processed_dfs.append(df)
 
     if processed_dfs:
         merged_df = pd.concat(processed_dfs, ignore_index=True)
-        return merged_df[
-            ["chrom", "pos_1base", "strand", "mod_num", "cov", "mod_rate", "motif"]
-        ]
+        output_cols = ["chrom", "pos_1base", "strand", "mod_num", "cov", "mod_rate"]
+        if "motif" in merged_df.columns:
+            output_cols.append("motif")
+        return merged_df[output_cols]
     else:
         return pd.DataFrame()
 
@@ -343,14 +345,16 @@ def process_inosine(df, args):
     )
     df = check_base(args.output_prefix, df, "inosine", 1, "A", args.modification_type)
 
-    return df[["chrom", "pos_1base", "strand", "mod_num", "cov", "mod_rate", "motif"]]
-
+    output_cols = ["chrom", "pos_1base", "strand", "mod_num", "cov", "mod_rate"]
+    if "motif" in df.columns:
+        output_cols.append("motif")
+    return df[output_cols]
 
 def cleanup_tmp_files(output_prefix, modification_type):
     """删除所有临时文件"""
     # 定义需要删除的文件模式
     file_patterns = [
-        f"*tmp*",  # 临时文件
+        f"{output_prefix}*tmp*",  # 临时文件
         f"{output_prefix}_{modification_type}*.bed",  # bed文件
         f"{output_prefix}_{modification_type}*.fa",  # fasta文件
     ]
@@ -475,4 +479,5 @@ if __name__ == "__main__":
 
     except Exception as e:
         print(f"Error: {e}")
-    call(f'rm {args.output_prefix}*tmp*', shell=True)
+        sys.exit(1) 
+    # call(f'rm {args.output_prefix}*tmp*', shell=True)
