@@ -5,6 +5,7 @@ import subprocess
 import threading
 import logging
 from datetime import datetime
+from nanornaqtl import __version__
 
 def setup_logging(output_dir, prefix):
     """
@@ -815,6 +816,7 @@ def main():
         description="nanornaqtl: 一个用于分析Nanopore Direct RNA数据分析多种分子表型及xQTLs的工具。",
         formatter_class=argparse.RawTextHelpFormatter,
     )
+    parser.add_argument('--version', '-v', action='version', version=f'nanornaqtl {__version__}')
     subparsers = parser.add_subparsers(dest="command", help="可用的子命令")
 
     # ---- 定义 "prep" 子命令 ----

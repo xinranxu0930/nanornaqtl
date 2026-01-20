@@ -1101,3 +1101,10 @@ This project is licensed under the MIT License. See [LICENSE](LICENSE) file for 
 - Support for 8 QTL analysis types
 - Implementation of Bayesian statistical methods
 - Support for multi-threaded parallel processing
+
+### v1.0.3 (2026-01-20)
+
+- Fix the coverage calculation
+- Add a logging system
+- Optimize the base mode support issue
+- Add version query
