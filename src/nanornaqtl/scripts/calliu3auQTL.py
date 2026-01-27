@@ -434,7 +434,7 @@ if __name__ == "__main__":
     base_minQ = args.min_qscore - 1 if args.min_qscore != 0 else 0
 
     if args.molecular_type == "APA":
-        overlap_df = pd.read_csv(args.read_overlap_file)
+        overlap_df = pd.read_csv(args.read_overlap_file, usecols = ['readID','APA_type'])
         df_dict = dict(zip(overlap_df["readID"], overlap_df["APA_type"]))  # readid:APA
     else:
         overlap_df = pd.read_csv(args.read_overlap_file, sep="\t", compression="gzip")

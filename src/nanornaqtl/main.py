@@ -486,16 +486,46 @@ def run_APA_analysis(args, scripts_dir, output_dir, logger):
 
     bam_path = os.path.abspath(args.bam)
 
-    cmd = [
-        "python",
-        os.path.join(scripts_dir, "getAPA.py"),
-        "-b",
-        bam_path,
-        "-o",
-        args.prefix,
-        "-a",
-        os.path.abspath(args.apadb),
-    ]
+    # 检查参数：apadb和fasta必须提供其一
+    has_apadb = hasattr(args, 'apadb') and args.apadb is not None
+    has_fasta = hasattr(args, 'fasta') and args.fasta is not None
+
+    if not has_apadb and not has_fasta:
+        print("错误：必须提供 --apadb 或 --fasta 参数之一", file=sys.stderr)
+        print("  --apadb: 使用APAdb数据库进行APA注释", file=sys.stderr)
+        print("  --fasta: 从头识别APA位点（需要参考基因组）", file=sys.stderr)
+        sys.exit(1)
+
+    if has_apadb:
+        # 使用APAdb数据库
+        print("  使用APAdb数据库进行APA注释...")
+        cmd = [
+            "python",
+            os.path.join(scripts_dir, "getAPA.py"),
+            "-b",
+            bam_path,
+            "-o",
+            args.prefix,
+            "-a",
+            os.path.abspath(args.apadb),
+        ]
+    else:
+        # 从头识别APA位点
+        print("  从头识别APA位点...")
+        cmd = [
+            "python",
+            os.path.join(scripts_dir, "getAPA_nonapadb.py"),
+            "-b",
+            bam_path,
+            "-f",
+            os.path.abspath(args.fasta),
+            "-o",
+            os.path.join(output_dir, args.prefix),
+            "-d",
+            str(args.distance),
+            "-t",
+            str(args.threads),
+        ]
 
     run_command(cmd, description="分析APA", working_dir=output_dir, logger=logger)
 
@@ -878,7 +908,7 @@ def main():
         parser.add_argument("-p", "--prefix", required=True, help="输出文件前缀名")
         parser.add_argument(
             "-o",
-            "--output-dir",
+            "--output_dir",
             required=True,
             help="输出目录路径，如果目录不存在则会新建",
         )
@@ -887,7 +917,7 @@ def main():
             "--threads",
             type=int,
             default=4,
-            help="使用的线程数，不建议设置很高（默认: 4）",
+            help="使用的线程数，不建议设置很高，最高只能设置44（默认: 4）",
         )
         parser.add_argument(
             "--min_mapq",
@@ -1056,7 +1086,9 @@ def main():
         description="nanornaqtl pheno APA: 分析选择性多聚腺苷酸化位点",
     )
     add_common_args(parser_apa)
-    parser_apa.add_argument("--apadb", required=True, help="APAdb bed文件路径")
+    parser_apa.add_argument("--apadb", required=False, help="APAdb bed文件路径（使用APAdb数据库进行APA注释， 与--fasta二选一）")
+    parser_apa.add_argument("-f", "--fasta", required=False, help="参考基因组fasta文件路径（从头识别APA，与--apadb二选一）")
+    parser_apa.add_argument("-d", "--distance", type=int, default=50, help="APA位点合并窗口大小（默认: 50bp，仅在使用--fasta时生效）")
     parser_apa.set_defaults(func=run_pheno_workflow)
 
     # === 内含子滞留率分析 ===

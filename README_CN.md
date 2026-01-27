@@ -12,7 +12,7 @@
 
 ### 主要功能
 
-- **7种分子表型识别** 📊:
+- **8种分子表型识别** 📊:
   - RNA修饰位点: m6A, m5C, pseudouridine (pseU), inosine
   - polyA尾长
   - 内含子滞留率
@@ -96,6 +96,7 @@ pod5 convert fast5 input.fast5 --output output.pod5
 dorado basecaller \
   model_path \
   pod5_directory/ \
+  --reference fasta.fa \
   --mm2-opts "-x splice -k 14" \
   > output.bam
 ```
@@ -111,6 +112,7 @@ dorado basecaller \
 dorado basecaller \
   model_path \
   pod5_directory/ \
+  --reference fasta.fa \
   --mm2-opts "-x splice -k 14" \
   --modified-bases-models model_name \
   > output.bam
@@ -131,6 +133,7 @@ dorado download --model dna_r10.4.1_e8.2_400bps_hac@v4.1.0
 dorado basecaller \
   model_path \
   pod5_directory/ \
+  --reference fasta.fa \
   --mm2-opts "-x splice -k 14" \
   --estimate-poly-a \
   > output.bam
@@ -145,28 +148,32 @@ dorado basecaller \
 ```bash
 # 1. 数据预处理
 nanornaqtl prep \
-  -b output.bam \
-  -p output_prefix \
-  -t 4 \
-  -q 0
+  -b raw_output.bam \
+  -p sample01 \
+  -o ./work_dir \
+  -t 8 \
+  -q 10
 
 # 2. 识别m6A修饰位点
 nanornaqtl pheno m6A \
-  -b output_prefix_calls_sorted_map.bam \
-  -o result_prefix \
+  -b sample01_calls_sorted_map.bam \
+  -p sample01_m6A \
+  -o ./work_dir \
   -t 20 \
-  --motif
+  -f hg19.fa \
+  --motif \
+  --metaPlotR
 
 # 3. 进行m6A QTL分析
 nanornaqtl qtl m6A \
-  -b output_prefix_calls_sorted_map.bam \
+  -b sample01_calls_sorted_map.bam \
   --snp_info snp_info.txt \
-  -o qtl_result_prefix \
-  -csv result_prefix_m6A_sites_result.csv \
-  -pkl result_prefix_m6A_reads_final.pkl \
+  -p sample01_m6A_qtl \
+  -o ./work_dir \
+  --modification_csv sample01_m6A_sites_result.csv \
+  --read_mod_dict sample01_m6A_reads_final.pkl \
   --geno_size hg19.chrom.sizes \
-  -m m6A \
-  --threads 20
+  -t 20
 ```
 
 ---
@@ -186,6 +193,7 @@ nanornaqtl qtl m6A \
 nanornaqtl prep \
   -b <basecall_bam> \
   -p <output_prefix> \
+  -o <output_dir> \
   -t <threads> \
   -q <min_mapq>
 ```
@@ -194,10 +202,11 @@ nanornaqtl prep \
 
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
-| `-b, --basecall_bam` | 输入的原始BAM文件路径 | 必需 |
-| `-p, --dir_pre` | 输出文件前缀 | 必需 |
+| `-b, --bam` | 输入的原始BAM文件路径 | 必需 |
+| `-p, --prefix` | 输出文件前缀名 | 必需 |
+| `-o, --output_dir` | 所有输出文件存放的目录，如果目录不存在则会新建 | 必需 |
 | `-t, --threads` | 线程数 | 4 |
-| `-q, --min_mapq` | 最小MAPQ阈值 | 0 |
+| `-q, --min_mapq` | read最小比对质量分数 | 0 |
 
 **输出文件**:
 
@@ -213,6 +222,7 @@ nanornaqtl prep \
 nanornaqtl prep \
   -b raw_output.bam \
   -p sample01 \
+  -o ./work_dir \
   -t 8 \
   -q 10
 ```
@@ -230,8 +240,10 @@ nanornaqtl prep \
 ```bash
 nanornaqtl pheno m6A \
   -b <map_bam> \
-  -o <output_prefix> \
+  -o <output_dir> \
+  -p <output_prefix> \
   -t <threads> \
+  -f <fasta.fa> \
   [--motif] \
   [--metaPlotR]
 ```
@@ -240,15 +252,18 @@ nanornaqtl pheno m6A \
 
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
-| `-b, --bam` | 输入BAM文件(`*_map.bam`) | 必需 |
-| `-o, --output_prefix` | 输出文件前缀 | 必需 |
-| `-t, --threads` | 线程数(最大有效值22) | 4 |
-| `-f, --mod_threshold` | 修饰概率阈值 | 0.75 |
-| `-q, --min_qscore` | 最小碱基质量 | 10 |
-| `--min_mapq` | 最小MAPQ | 0 |
-| `-r, --min_rate` | 最小修饰率 | 0.1 |
-| `-c, --min_cov` | 最小覆盖度 | 5 |
+| `-b, --bam` | 从prep步骤得到的map.bam文件路径(`*_map.bam`) | 必需 |
+| `-o, --output_dir` | 输出文件目录，如果目录不存在则会新建 | 必需 |
+| `-p, --prefix` | 输出文件前缀名 | 必需 |
+| `-t, --threads` | 线程数 | 4 |
+| `--mod_threshold` | 修饰概率阈值 | 0.75 |
+| `--min_qscore` | 修饰位点最小碱基质量分数 | 10 |
+| `--min_mapq` | 最小read比对质量（MAPQ） | 0 |
+| `-f, --fasta` | 参考基因组fasta文件路径 | 必需 |
+| `--min_rate` | 最小修饰率 | 0.1 |
+| `--min_cov` | 修饰位点最小覆盖度 | 5 |
 | `--motif` | 启用motif过滤(DRACH: `[GAT][GA]AC[ATC]`) | False |
+| `--motifPaint` | 启用motif图绘制 | False |
 | `--metaPlotR` | 生成用于[metaPlotR](https://github.com/olarerin/metaPlotR)的bed文件 | False |
 
 **输出文件**:
@@ -273,15 +288,19 @@ nanornaqtl pheno m6A \
 # 使用motif过滤
 nanornaqtl pheno m6A \
   -b sample01_calls_sorted_map.bam \
-  -o sample01_m6A \
+  -p sample01_m6A \
+  -o ./work_dir \
   -t 20 \
+  -f hg19.fa \
   --motif \
   --metaPlotR
 
 # 不使用motif过滤
 nanornaqtl pheno m6A \
   -b sample01_calls_sorted_map.bam \
-  -o sample01_m6A \
+  -p sample01_m6A \
+  -o ./work_dir \
+  -f hg19.fa \
   -t 20
 ```
 
@@ -296,8 +315,10 @@ nanornaqtl pheno m6A \
 ```bash
 nanornaqtl pheno m5C \
   -b <map_bam> \
-  -o <output_prefix> \
+  -p <output_prefix> \
+  -o <output_dir> \
   -t <threads> \
+  -f <fasta.fa> \
   [--motif] \
   [--metaPlotR]
 ```
@@ -320,8 +341,10 @@ nanornaqtl pheno m5C \
 ```bash
 nanornaqtl pheno m5C \
   -b sample01_calls_sorted_map.bam \
-  -o sample01_m5C \
+  -p sample01_m5C \
+  -o ./work_dir \
   -t 20 \
+  -f <fasta.fa> \
   --motif
 ```
 
@@ -336,8 +359,10 @@ nanornaqtl pheno m5C \
 ```bash
 nanornaqtl pheno pseU \
   -b <map_bam> \
-  -o <output_prefix> \
+  -p <output_prefix> \
+  -o <output_dir> \
   -t <threads> \
+  -f <fasta.fa> \
   [--motif] \
   [--metaPlotR]
 ```
@@ -360,7 +385,9 @@ nanornaqtl pheno pseU \
 ```bash
 nanornaqtl pheno pseU \
   -b sample01_calls_sorted_map.bam \
-  -o sample01_pseU \
+  -p sample01_pseU \
+  -o ./work_dir \
+  -f hg19.fa \
   -t 20 \
   --motif
 ```
@@ -376,7 +403,9 @@ nanornaqtl pheno pseU \
 ```bash
 nanornaqtl pheno inosine \
   -b <map_bam> \
-  -o <output_prefix> \
+  -p <output_prefix> \
+  -o <output_dir> \
+  -f <fasta.fa> \
   -t <threads> \
   [--motif] \
   [--metaPlotR]
@@ -395,7 +424,9 @@ nanornaqtl pheno inosine \
 ```bash
 nanornaqtl pheno inosine \
   -b sample01_calls_sorted_map.bam \
-  -o sample01_inosine \
+  -p sample01_inosine \
+  -o ./work_dir \
+  -f hg19.fa \
   -t 20 \
   --motif
 ```
@@ -413,7 +444,8 @@ nanornaqtl pheno inosine \
 ```bash
 nanornaqtl pheno polyA_tail \
   -b <map_bam> \
-  -o <output_prefix> \
+  -p <output_prefix> \
+  -o <output_dir> \
   -t <threads>
 ```
 
@@ -421,9 +453,10 @@ nanornaqtl pheno polyA_tail \
 
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
-| `-b, --bamfile` | 输入BAM文件 | 必需 |
-| `-o, --output_prefix` | 输出前缀 | 必需 |
-| `-t, --threads` | 线程数(最大有效值22) | 4 |
+| `-b, --bam` | 从prep步骤得到的map.bam文件路径 | 必需 |
+| `-p, --prefix` | 输出文件前缀名 | 必需 |
+| `-o, --output_dir` | 输出目录路径，如果目录不存在则会新建 | 必需 |
+| `-t, --threads` | 线程数 | 4 |
 
 **输出文件**:
 
@@ -441,7 +474,8 @@ nanornaqtl pheno polyA_tail \
 ```bash
 nanornaqtl pheno polyA_tail \
   -b sample01_calls_sorted_map.bam \
-  -o sample01_polyA \
+  -p sample01_polyA \
+  -o ./work_dir \
   -t 20
 ```
 
@@ -466,9 +500,9 @@ nanornaqtl pheno intron_retention \
 | 参数 | 说明 |
 |------|------|
 | `-g, --gtf` | GTF注释文件路径 |
-| `-b, --bam` | 输入BAM文件 |
-| `-o, --output` | 输出目录 |
-| `-p, --output_prefix` | 输出文件前缀 |
+| `-b, --bam` | 从prep步骤得到的map.bam文件路径 |
+| `-p, --prefix` | 输出文件前缀名 |
+| `-o, --output_dir` | 输出目录路径，如果目录不存在则会新建 |
 
 **输出文件**:
 
@@ -498,38 +532,58 @@ nanornaqtl pheno intron_retention \
 
 #### 2.7 可变polyA位点 (APA)识别
 
-**功能**: 识别每条read使用的可变polyA位点。
+**功能**: 识别每条read使用的可变polyA位点。支持两种模式：基于APAdb数据库注释，或从头识别APA位点。
 
 **命令**:
 
+模式一：使用APAdb数据库
 ```bash
 nanornaqtl pheno APA \
-  -b <map_bam> \
-  -o <output_prefix> \
-  -a <apa_file>
+  -b  <map_bam> \
+  -p  <output_prefix> \
+  -o  <output_dir> \
+  --apadb <apadb_file>
+```
+
+模式二：从头识别APA位点
+```bash
+nanornaqtl pheno APA \
+  -b  <map_bam> \
+  -p  <output_prefix> \
+  -o  <output_dir> \
+  -f  <fasta_file> \
+  -d  <distance> \
+  -t <threads>
 ```
 
 **参数说明**:
 
 | 参数 | 说明 |
 |------|------|
-| `-b, --bam` | 输入BAM文件 |
-| `-o, --output_prefix` | 输出前缀 |
-| `-a, --apa_file` | APA位点数据文件(BED格式) |
+| `-b, --bam` | 从prep步骤得到的map.bam文件路径 |
+| `-p, --prefix` | 输出文件前缀 |
+| `-o, --output_dir` | 输出目录 |
+| `--apadb` | APAdb数据库文件（**与`-f`二选一**，通过使用APAdb数据库进行APA注释） |
+| `-f, --fasta` | 参考基因组fasta文件（**与`--apadb`二选一**，用于从头识别APA） |
+| `-d, --distance` | APA位点合并窗口大小（默认: 50bp，仅在使用`-f`时生效） |
+| `-t, --threads` | 线程数（默认: 4，最大: 44，仅在使用`-f`时生效） |
 
-**APA数据来源**:
+**两种模式的区别**:
+
+- **APAdb模式** (`--apadb`)：使用已知的APA位点数据库进行注释，速度快，依赖数据库质量
+- **从头识别模式** (`-f`)：通过检测read末端的poly(A)尾信号从头识别PAS位点，并在指定窗口内聚类为APA区间，不依赖外部数据库
+
+**APAdb数据来源**:
 
 推荐从[APAdb](https://ngdc.cncb.ac.cn/databasecommons/database/id/853)下载,或使用自定义APA位点数据。
 
-**APA文件格式要求** (BED格式,10列):
-
+**APAdb文件格式要求** (BED格式,10列):
 ```
 chr1	16442	16450	WASH7P.1:16442-16450	43	-	Intron	16443.0	16443	-
 chr1	134934	134953	LOC729737.1:134934-134953	26	-	UTR3	134944.0	134944	-
 ```
 
-**重要**: APA文件需要排序:
-
+**重要**: APAdb文件需要排序:
 ```bash
 sort -k1,1 -k2,2n apa_raw.bed > apa_sorted.bed
 ```
@@ -544,14 +598,28 @@ sort -k1,1 -k2,2n apa_raw.bed > apa_sorted.bed
 |------|------|
 | `readID` | read标识符 |
 | `APA_type` | APA位点类型 |
+| `PAS_site` | PAS位点位置（仅从头识别模式） |
 
 **示例**:
 
+使用APAdb:
 ```bash
 nanornaqtl pheno APA \
   -b sample01_calls_sorted_map.bam \
-  -o sample01_APA \
-  -a apa_sorted.bed
+  -o ./work_dir \
+  -p sample01_APA \
+  --apadb apa_sorted.bed
+```
+
+从头识别:
+```bash
+nanornaqtl pheno APA \
+  -b sample01_calls_sorted_map.bam \
+  -o ./work_dir \
+  -p sample01_APA \
+  -f hg38.fa \
+  -d 35 \
+  -t 20
 ```
 
 ---
@@ -566,11 +634,11 @@ nanornaqtl pheno APA \
 
 ```bash
 isoquant.py \
-  --reference /path/to/reference.fa \
-  --genedb /path/to/annotation.gtf \
-  --bam /path/to/sample_calls_sorted_map.bam \
+  --reference hg38.fa \
+  --genedb annotation.gtf \
+  --bam map.bam \
   --data_type nanopore \
-  -o output_directory \
+  -o ./work_dir \
   -t 60 \
   --complete_genedb
 ```
@@ -581,7 +649,7 @@ isoquant.py \
 |------|------|
 | `--reference` | 参考基因组FASTA文件 |
 | `--genedb` | GTF注释文件 |
-| `--bam` | 输入BAM文件 |
+| `--bam` | 从prep步骤得到的map.bam文件路径 |
 | `--data_type` | 数据类型(nanopore) |
 | `-o` | 输出目录 |
 | `-t` | 线程数 |
@@ -597,9 +665,9 @@ isoquant.py \
 
 所有QTL分析都需要以下共同输入:
 
-#### 变异位点文件准备 📋
+#### SNP信息文件路径准备 📋
 
-**变异位点文件格式** (`--snp_info`参数):
+**SNP信息文件路径格式** (`--snp_info`参数):
 
 **必需列** (列名必须完全一致,顺序不限):
 
@@ -651,28 +719,28 @@ plink --freq --bfile your_data --out snp_info
 nanornaqtl qtl m6A \
   -b <map_bam> \
   --snp_info <snp_file> \
-  -o <output_prefix> \
-  -csv <m6A_sites_csv> \
-  -pkl <m6A_reads_pkl> \
+  -p <output_prefix> \
+  -o <output_dir> \
+  --modification_csv <m6A_sites_csv> \
+  --read_mod_dict <m6A_reads_pkl> \
   --geno_size <genome_size_file> \
-  -m m6A \
-  --threads <threads>
+  -t <threads>
 ```
 
 **参数说明**:
 
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
-| `-b, --bam` | 输入BAM文件 | 必需 |
-| `--snp_info` | 变异位点文件 | 必需 |
-| `-o, --output_prefix` | 输出前缀 | 必需 |
-| `-csv, --modification` | m6A位点结果文件(`*_m6A_sites_result.csv`) | 必需 |
-| `-pkl, --read_mod_dict` | m6A reads字典文件(`*_m6A_reads_final.pkl`) | 必需 |
+| `-b, --bam` | 从prep步骤得到的map.bam文件路径 | 必需 |
+| `--snp_info` | SNP信息文件路径 | 必需 |
+| `-p, --prefix` | 输出文件前缀名 | 必需 |
+| `-o, --output_dir` | 输出目录路径，如果目录不存在则会新建 | 必需 |
+| `--modification_csv` | m6A修饰位点结果CSV文件路径（来自pheno步骤） | 必需 |
+| `--read_mod_dict` |修饰read字典PKL文件路径（来自pheno步骤） | 必需 |
 | `--geno_size` | 基因组大小文件(如hg19.chrom.sizes) | 必需 |
-| `-m, --modification_type` | 修饰类型(m6A) | 必需 |
-| `-q, --min_qscore` | 最小碱基质量 | 10 |
+| `-q, --min_qscore` | 变异位点最小碱基质量分数 | 10 |
 | `-c, --min_coverage` | 最小总覆盖度 | 8 |
-| `--mcmc_samples` | MCMC采样数 | 1000 |
+| `--mcmc_samples` | MCMC采样数 | 2000 |
 | `--threads` | 线程数 | 4 |
 | `--keep_tmp` | 保留临时文件 | False |
 
@@ -712,13 +780,12 @@ nanornaqtl qtl m6A \
 nanornaqtl qtl m6A \
   -b sample01_calls_sorted_map.bam \
   --snp_info snp_info.txt \
-  -o sample01_m6A_qtl \
-  -csv sample01_m6A_sites_result.csv \
-  -pkl sample01_m6A_reads_final.pkl \
+  -p sample01_m6A_qtl \
+  -o ./work_dir \
+  --modification_csv sample01_m6A_sites_result.csv \
+  --read_mod_dict sample01_m6A_reads_final.pkl \
   --geno_size hg19.chrom.sizes \
-  -m m6A \
-  --threads 20 \
-  --mcmc_samples 2000
+  -t 20
 ```
 
 ---
@@ -733,15 +800,15 @@ nanornaqtl qtl m6A \
 nanornaqtl qtl m5C \
   -b <map_bam> \
   --snp_info <snp_file> \
-  -o <output_prefix> \
-  -csv <m5C_sites_csv> \
-  -pkl <m5C_reads_pkl> \
+  -p <output_prefix> \
+  -o <output_dir> \
+  --modification_csv <m5C_sites_csv> \
+  --read_mod_dict <m5C_reads_pkl> \
   --geno_size <genome_size_file> \
-  -m m5C \
-  --threads <threads>
+  -t <threads>
 ```
 
-**参数**: 与m6A QTL相同,将`-m`参数改为`m5C`
+**参数**: 与m6A QTL相同
 
 **输出文件**:
 
@@ -755,12 +822,12 @@ nanornaqtl qtl m5C \
 nanornaqtl qtl m5C \
   -b sample01_calls_sorted_map.bam \
   --snp_info snp_info.txt \
-  -o sample01_m5C_qtl \
-  -csv sample01_m5C_sites_result.csv \
-  -pkl sample01_m5C_reads_final.pkl \
+  -p sample01_m5C_qtl \
+  -o ./work_dir \
+  --modification_csv sample01_m5C_sites_result.csv \
+  --read_mod_dict sample01_m5C_reads_final.pkl \
   --geno_size hg19.chrom.sizes \
-  -m m5C \
-  --threads 20
+  -t 20
 ```
 
 ---
@@ -775,15 +842,15 @@ nanornaqtl qtl m5C \
 nanornaqtl qtl pseU \
   -b <map_bam> \
   --snp_info <snp_file> \
-  -o <output_prefix> \
-  -csv <pseU_sites_csv> \
-  -pkl <pseU_reads_pkl> \
+  -p <output_prefix> \
+  -o <output_dir> \
+  --modification_csv <pseU_sites_csv> \
+  --read_mod_dict <pseU_reads_pkl> \
   --geno_size <genome_size_file> \
-  -m pseU \
-  --threads <threads>
+  -t <threads>
 ```
 
-**参数**: 与m6A QTL相同,将`-m`参数改为`pseU`
+**参数**: 与m6A QTL相同
 
 **输出文件**:
 
@@ -795,12 +862,12 @@ nanornaqtl qtl pseU \
 nanornaqtl qtl pseU \
   -b sample01_calls_sorted_map.bam \
   --snp_info snp_info.txt \
-  -o sample01_pseU_qtl \
-  -csv sample01_pseU_sites_result.csv \
-  -pkl sample01_pseU_reads_final.pkl \
+  -p sample01_pseU_qtl \
+  -o ./work_dir \
+  --modification_csv sample01_pseU_sites_result.csv \
+  --read_mod_dict sample01_pseU_reads_final.pkl \
   --geno_size hg19.chrom.sizes \
-  -m pseU \
-  --threads 20
+  -t 20
 ```
 
 ---
@@ -815,15 +882,15 @@ nanornaqtl qtl pseU \
 nanornaqtl qtl inosine \
   -b <map_bam> \
   --snp_info <snp_file> \
-  -o <output_prefix> \
-  -csv <inosine_sites_csv> \
-  -pkl <inosine_reads_pkl> \
+  -p <output_prefix> \
+  -o <output_dir> \
+  --modification_csv <inosine_sites_csv> \
+  --read_mod_dict <inosine_reads_pkl> \
   --geno_size <genome_size_file> \
-  -m inosine \
-  --threads <threads>
+  -t <threads>
 ```
 
-**参数**: 与m6A QTL相同,将`-m`参数改为`inosine`
+**参数**: 与m6A QTL相同
 
 **输出文件**:
 
@@ -835,12 +902,12 @@ nanornaqtl qtl inosine \
 nanornaqtl qtl inosine \
   -b sample01_calls_sorted_map.bam \
   --snp_info snp_info.txt \
-  -o sample01_inosine_qtl \
-  -csv sample01_inosine_sites_result.csv \
-  -pkl sample01_inosine_reads_final.pkl \
+  -p sample01_inosine_qtl \
+  -o ./work_dir \
+  --modification_csv sample01_inosine_sites_result.csv \
+  --read_mod_dict sample01_inosine_reads_final.pkl \
   --geno_size hg19.chrom.sizes \
-  -m inosine \
-  --threads 20
+  -t 20
 ```
 
 ---
@@ -855,10 +922,10 @@ nanornaqtl qtl inosine \
 nanornaqtl qtl APA \
   -b <map_bam> \
   --snp_info <snp_file> \
-  -o <output_prefix> \
-  -f <apa_result_csv> \
+  -p <output_prefix> \
+  -o <output_dir> \
+  --read_overlap_file <apa_result_csv> \
   --geno_size <genome_size_file> \
-  -m APA \
   -t <threads>
 ```
 
@@ -866,15 +933,15 @@ nanornaqtl qtl APA \
 
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
-| `-b, --bam` | 输入BAM文件 | 必需 |
-| `--snp_info` | 变异位点文件 | 必需 |
-| `-o, --output_prefix` | 输出前缀 | 必需 |
-| `-f, --read_overlap_file` | APA结果文件(`*_APA_result.csv`) | 必需 |
+| `-b, --bam` | 从prep步骤得到的map.bam文件路径 | 必需 |
+| `--snp_info` | SNP信息文件路径 | 必需 |
+| `-p, --prefix` | 输出文件前缀名 | 必需 |
+| `-o, --output_dir` | 输出目录路径，如果目录不存在则会新建 | 必需 |
+| `--read_overlap_file` | APA结果文件(`*_APA_result.csv`) | 必需 |
 | `--geno_size` | 基因组大小文件 | 必需 |
-| `-m, --molecular_type` | 分子表型类型(APA) | 必需 |
-| `-q, --min_qscore` | 最小碱基质量 | 10 |
-| `--min_coverage` | 最小覆盖度 | 8 |
-| `--mcmc_samples` | MCMC采样数 | 1000 |
+| `-q, --min_qscore` | 变异位点最小碱基质量分数 | 10 |
+| `-c, --min_coverage` | 变异位点最小覆盖度 | 8 |
+| `--mcmc_samples` | MCMC采样数 | 2000 |
 | `-t, --threads` | 线程数 | 4 |
 | `--keep_tmp` | 保留临时文件 | False |
 
@@ -917,10 +984,10 @@ nanornaqtl qtl APA \
 nanornaqtl qtl APA \
   -b sample01_calls_sorted_map.bam \
   --snp_info snp_info.txt \
-  -o sample01_APA_qtl \
-  -f sample01_APA_result.csv \
+  -p sample01_APA_qtl \
+  -o ./work_dir \
+  --read_overlap_file sample01_APA_result.csv \
   --geno_size hg19.chrom.sizes \
-  -m APA \
   -t 20
 ```
 
@@ -936,10 +1003,10 @@ nanornaqtl qtl APA \
 nanornaqtl qtl isoform \
   -b <map_bam> \
   --snp_info <snp_file> \
-  -o <output_prefix> \
-  -f <isoquant_output> \
+  -p <output_prefix> \
+  -o <output_dir> \
+  --read_overlap_file <isoquant_output> \
   --geno_size <genome_size_file> \
-  -m isoform \
   -t <threads>
 ```
 
@@ -947,7 +1014,7 @@ nanornaqtl qtl isoform \
 
 | 参数 | 说明 |
 |------|------|
-| `-f, --read_overlap_file` | IsoQuant输出文件(`OUT.transcript_model_reads.tsv.gz`) |
+| `--read_overlap_file` | IsoQuant输出文件(`OUT.transcript_model_reads.tsv.gz`) |
 | 其他参数 | 与APA QTL相同 |
 
 **输出文件**:
@@ -964,10 +1031,10 @@ nanornaqtl qtl isoform \
 nanornaqtl qtl isoform \
   -b sample01_calls_sorted_map.bam \
   --snp_info snp_info.txt \
-  -o sample01_isoform_qtl \
-  -f OUT.transcript_model_reads.tsv.gz \
+  -p sample01_isoform_qtl \
+  -o ./work_dir \
+  --read_overlap_file OUT.transcript_model_reads.tsv.gz \
   --geno_size hg19.chrom.sizes \
-  -m isoform \
   -t 20
 ```
 
@@ -983,25 +1050,26 @@ nanornaqtl qtl isoform \
 nanornaqtl qtl polyA_tail \
   -b <map_bam> \
   --snp_info <snp_file> \
-  -o <output_prefix> \
-  -csv <polyA_csv> \
+  -p <output_prefix> \
+  -o <output_dir> \
+  --polya_csv <polyA_csv> \
   --geno_size <genome_size_file> \
-  --threads <threads>
+  -t <threads>
 ```
 
 **参数说明**:
 
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
-| `-b, --bam` | 输入BAM文件 | 必需 |
-| `--snp_info` | 变异位点文件 | 必需 |
-| `-o, --output_prefix` | 输出前缀 | 必需 |
-| `-csv, --polya_csv` | polyA结果文件(`*_polyAlen_result.csv`) | 必需 |
+| `-b, --bam` | 从prep步骤得到的map.bam文件路径 | 必需 |
+| `--snp_info` | SNP信息文件路径 | 必需 |
+| `-p, --prefix` | 输出文件前缀名 | 必需 |
+| `--polya_csv` | polyA尾长结果CSV文件路径(`*_polyAlen_result.csv`) | 必需 |
 | `--geno_size` | 基因组大小文件 | 必需 |
-| `-q, --min_qscore` | 最小碱基质量 | 10 |
-| `--min_coverage` | 最小覆盖度 | 8 |
+| `-q, --min_qscore` | 变异位点最小碱基质量分数 | 10 |
+| `-c, --min_coverage` | 变异位点最小覆盖度 | 8 |
 | `--mcmc_samples` | MCMC采样数 | 2000 |
-| `--threads` | 线程数 | 4 |
+| `-t, --threads` | 线程数 | 4 |
 | `--keep_tmp` | 保留临时文件 | False |
 
 **输出文件**:
@@ -1040,11 +1108,11 @@ nanornaqtl qtl polyA_tail \
 nanornaqtl qtl polyA_tail \
   -b sample01_calls_sorted_map.bam \
   --snp_info snp_info.txt \
-  -o sample01_polyA_qtl \
-  -csv sample01_polyAlen_result.csv \
+  -p sample01_polyA_qtl \
+  -o ./work_dir \
+  --polya_csv sample01_polyAlen_result.csv \
   --geno_size hg19.chrom.sizes \
-  --threads 20 \
-  --mcmc_samples 2000
+  -t 20
 ```
 
 ---
@@ -1059,17 +1127,18 @@ nanornaqtl qtl polyA_tail \
 nanornaqtl qtl intron_retention \
   -b <map_bam> \
   --snp_info <snp_file> \
-  -o <output_prefix> \
-  -csv <ir_csv> \
+  -p <output_prefix> \
+  -o <output_dir> \
+  --ir_csv <ir_csv> \
   --geno_size <genome_size_file> \
-  --threads <threads>
+  -t <threads>
 ```
 
 **参数说明**:
 
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
-| `-csv, --ir_csv` | 内含子滞留率结果文件(`*_intronRetention_result.csv`) | 必需 |
+| `--ir_csv` | 内含子滞留率结果文件(`*_intronRetention_result.csv`) | 必需 |
 | 其他参数 | 与polyA尾长QTL相同 |
 
 **输出文件**:
@@ -1104,10 +1173,11 @@ nanornaqtl qtl intron_retention \
 nanornaqtl qtl intron_retention \
   -b sample01_calls_sorted_map.bam \
   --snp_info snp_info.txt \
-  -o sample01_IR_qtl \
-  -csv sample01_intronRetention_result.csv \
+  -p sample01_IR_qtl \
+  -o ./work_dir \
+  --ir_csv sample01_intronRetention_result.csv \
   --geno_size hg19.chrom.sizes \
-  --threads 20
+  -t 20
 ```
 
 ---
@@ -1183,3 +1253,8 @@ https://github.com/xinranxu0930/nanornaqtl
 - 添加日志系统
 - 优化base模式支持问题
 - 添加版本查询
+
+### v1.0.4 (2026-01-27)
+
+- 添加从头识别APA的新功能
+- 修复README中部分参数的描述错误

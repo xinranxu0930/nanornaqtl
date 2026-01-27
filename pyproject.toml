@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "nanornaqtl"
-version = "1.0.3"
+version = "1.0.4"
 description = "A comprehensive toolkit for multi-molecular phenotyping and QTL analysis based on Nanopore direct RNA sequencing data"
 authors = ["Xinran Xu <xinranxu0930@gmail.com>"]
 license = "MIT"
